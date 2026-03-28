@@ -1,0 +1,304 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --text: #0b1220;
+  --muted: #6b7280;
+  --accent: #0077ff;
+  --border: #e6eef8;
+  --danger: #d9534f;
+  --success: #28a745;
+  --topbar-height: 56px;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* 背景图：使用 src/assets/back.webp，并应用模糊效果 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url('./assets/back.webp');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  filter: blur(8px) saturate(0.95) brightness(0.95);
+  transform: scale(1.03);
+  pointer-events: none;
+}
+
+/* 顶部导航栏保持白色卡片背景（不显示模糊背景图） */
+.top-header, .topbar, .top-nav, .nav-links, .top-header .admin-header, .topbar .brand {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 6px 18px rgba(10,20,40,0.06) !important;
+}
+
+/* 导航按钮保持卡片样式（非透明），但保留 ghost 风格外观 */
+.nav-link { background: transparent; }
+.btn.ghost { background: transparent; border: 1px solid transparent; }
+
+/* 地图区域不显示背景，保持透明 */
+.map-stage, .map-shell, .map-fullscreen-canvas, .leaflet-map {
+  background: transparent !important;
+}
+
+/* Hide native scrollbars for a cleaner look */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { width: 0; height: 0; }
+body.modal-open {
+  overflow: hidden;
+}
+
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.top-header {
+  height: 56px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+.top-nav {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  height: 100%;
+}
+.nav-link {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.nav-link:hover {
+  color: var(--accent);
+}
+.nav-link.ghost { background: transparent; }
+body.modal-open .top-header {
+  display: none;
+}
+body.modal-open .top-header.admin-header {
+  display: flex !important;
+  position: relative;
+  z-index: 3200 !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.topbar .brand { font-weight: 700; letter-spacing: 0.2px; }
+.nav-links { display: flex; gap: 14px; align-items: center; }
+.nav-links a { color: var(--text); text-decoration: none; font-weight: 600; font-size: 14px; }
+.nav-links a.router-link-active { color: var(--accent); }
+
+body.modal-open .topbar, body.modal-open .top-header { z-index: 0 !important; opacity: 0.01; pointer-events: none; }
+
+/* 主容器不加内边距，由页面自行控制 */
+.main-body { flex: 1; padding: 0; display: flex; min-height: 0; position: relative; overflow: hidden; }
+.route-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.route-slide-enter-active,
+.route-slide-leave-active {
+  transition: transform 320ms ease, opacity 320ms ease;
+  position: absolute;
+  inset: 0;
+}
+.route-slide-enter-from {
+  transform: translateX(-32px);
+  opacity: 0;
+}
+.route-slide-enter-to {
+  transform: translateX(0);
+  opacity: 1;
+}
+.route-slide-leave-from {
+  transform: translateX(0);
+  opacity: 1;
+}
+.route-slide-leave-to {
+  transform: translateX(32px);
+  opacity: 0;
+}
+
+/* 普通页面统一内边距与底部导航避让 */
+.page-pad { padding: 18px 18px 74px; }
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  text-align: center;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  z-index: 1200;
+}
+.bottom-nav a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+.bottom-nav a.router-link-active {
+  color: var(--accent);
+}
+
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 10, 18, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 3000;
+}
+body.modal-open .bottom-nav {
+  display: none;
+}
+.login-card { width: min(520px, 92vw); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(10,20,40,0.06);
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.15s;
+}
+.btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+.btn.danger { border-color: var(--danger); color: var(--danger); background: rgba(217,83,79,0.08); }
+.btn.ghost { background: transparent; }
+
+.input, .select, textarea {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  outline: none;
+  font-size: 14px;
+}
+
+.row { display: flex; gap: 12px; }
+.row.wrap { flex-wrap: wrap; }
+
+.muted { color: var(--muted); font-size: 13px; }
+.section-title { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
+
+.grid { display: grid; gap: 12px; }
+
+.badge { display: inline-flex; align-items: center; padding: 4px 8px; background: rgba(15,23,36,0.04); border-radius: 8px; color: var(--muted); font-size: 12px; }
+
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+/* 全局统一 tag 风格：圆角矩形，垂直高度受限，文本居中 */
+.tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 8px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  border-radius: 8px !important;
+  line-height: 1 !important;
+  font-size: 12px !important;
+}
+
+/* 在工具栏搜索与组件搜索左侧显示人物小图（yuki_search），使人物紧贴搜索框 */
+.toolbar-search {
+  position: relative;
+}
+.toolbar-search::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 72px;
+  height: 72px;
+  background-image: url('./assets/yuki_search.webp');
+  background-size: cover;
+  background-position: center center;
+  pointer-events: none;
+  border-radius: 8px;
+}
+.toolbar-search .input {
+  padding-left: 92px; /* leave space for larger image */
+}
+
+/* LandmarkSearch component: ensure search-box input also shows image */
+.search-box {
+  position: relative;
+}
+.search-box::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 72px;
+  height: 72px;
+  background-image: url('./assets/yuki_search.webp');
+  background-size: cover;
+  background-position: center center;
+  pointer-events: none;
+  border-radius: 8px;
+}
+.search-box .input { padding-left: 92px; }
+
+/* 图片翻页按钮：使用 konata_up.webp 并为前/后按钮旋转 */
+.carousel .btn.nav img {
+  width: 32px;
+  height: 32px;
+  display: block;
+}
+.carousel .btn.nav.prev img { transform: rotate(-90deg); }
+.carousel .btn.nav.next img { transform: rotate(90deg); }
+.carousel .btn.nav { padding: 8px; }
