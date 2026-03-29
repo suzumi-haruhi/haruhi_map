@@ -7,102 +7,43 @@
     <template v-if="teleportToolbar">
       <teleport to="#community-topbar">
         <div class="community-topbar-inner">
-          <div class="community-header">
-            
-            <div class="toolbar">
-            <div class="toolbar-group">
-              <label class="muted">排序</label>
-              <select class="input" v-model="sortBy">
-                <option value="time">时间</option>
-                <option value="likes">点赞</option>
-              </select>
-              <select class="input" v-model="sortOrder">
-                <option value="desc">倒序</option>
-                <option value="asc">正序</option>
-              </select>
-            </div>
-            <div class="toolbar-group landmark">
-              <label class="muted">地标筛选</label>
-              <LandmarkPicker :items="landmarks" v-model="filterLandmarkObj" />
-            </div>
-            <div class="toolbar-group toolbar-tags">
-              <label class="muted">普通标签筛选（可多选）</label>
-              <FreeTagInput
-                v-model="selectedFilterTags"
-                button-text="添加筛选标签"
-                placeholder="输入要筛选的标签"
-              />
-            </div>
-            <div class="toolbar-group">
-              <label class="muted">管理员</label>
-              <button
-                class="btn ghost"
-                :style="adminOnly ? 'border-color: var(--accent); color: var(--accent);' : ''"
-                @click="toggleAdminOnly"
-              >只看管理员</button>
-            </div>
-            <div class="toolbar-group toolbar-search">
-              <label class="muted">搜索</label>
-              <input class="input" v-model="searchQuery" placeholder="搜索内容 / 用户名 / 标签" />
-            </div>
-            <div class="publish-wrapper">
-              <div class="publish-image">
-                <img src="@/assets/yuki_upload.webp" alt="yuki" class="publish-img" />
-              </div>
-              <button class="btn primary publish-inline" @click="openPublish">发布</button>
-            </div>
-          </div>
+          <CommunityToolbar
+            :landmarks="landmarks"
+            v-model:sortBy="sortBy"
+            v-model:sortOrder="sortOrder"
+            v-model:filterLandmark="filterLandmarkObj"
+            :selectedFilterTags="selectedFilterTags"
+            v-model:searchQuery="searchQuery"
+            :adminOnly="adminOnly"
+            :visibleCount="sortedPosts.length"
+            :totalCount="posts.length"
+            :activeFilterCount="activeFilterCount"
+            @toggle-admin-only="toggleAdminOnly"
+            @remove-filter-tag="removeSelectedFilterTag"
+            @clear-filters="clearFilters"
+            @open-publish="openPublish"
+          />
         </div>
-      </div>
       </teleport>
     </template>
 
     <template v-else>
-    <div class="community-header">
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <label class="muted">排序</label>
-          <select class="input" v-model="sortBy">
-            <option value="time">时间</option>
-            <option value="likes">点赞</option>
-          </select>
-          <select class="input" v-model="sortOrder">
-            <option value="desc">倒序</option>
-            <option value="asc">正序</option>
-          </select>
-        </div>
-        <div class="toolbar-group landmark">
-          <label class="muted">地标筛选</label>
-          <LandmarkPicker :items="landmarks" v-model="filterLandmarkObj" />
-        </div>
-        <div class="toolbar-group toolbar-tags">
-          <label class="muted">普通标签筛选（可多选）</label>
-          <FreeTagInput
-            v-model="selectedFilterTags"
-            button-text="添加筛选标签"
-            placeholder="输入要筛选的标签"
-          />
-        </div>
-        <div class="toolbar-group">
-          <label class="muted">管理员</label>
-          <button
-            class="btn ghost"
-            :style="adminOnly ? 'border-color: var(--accent); color: var(--accent);' : ''"
-            @click="toggleAdminOnly"
-          >只看管理员</button>
-        </div>
-        <div class="toolbar-group toolbar-search">
-          <label class="muted">搜索</label>
-          <input class="input" v-model="searchQuery" placeholder="搜索内容 / 用户名 / 标签" />
-        </div>
-        <div class="publish-wrapper">
-          <div class="publish-image">
-            <img src="@/assets/yuki_upload.webp" alt="yuki" class="publish-img" />
-          </div>
-          <button class="btn primary publish-inline" @click="openPublish">发布</button>
-        </div>
-      </div>
-    </div>
+      <CommunityToolbar
+        :landmarks="landmarks"
+        v-model:sortBy="sortBy"
+        v-model:sortOrder="sortOrder"
+        v-model:filterLandmark="filterLandmarkObj"
+        :selectedFilterTags="selectedFilterTags"
+        v-model:searchQuery="searchQuery"
+        :adminOnly="adminOnly"
+        :visibleCount="sortedPosts.length"
+        :totalCount="posts.length"
+        :activeFilterCount="activeFilterCount"
+        @toggle-admin-only="toggleAdminOnly"
+        @remove-filter-tag="removeSelectedFilterTag"
+        @clear-filters="clearFilters"
+        @open-publish="openPublish"
+      />
     </template>
 
     <div class="community-main">
@@ -371,7 +312,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/userStore.js'
 import { api } from '../services/api.js'
 import { compressFile } from '../utils/imageCompressor.js'
-import CommunityHeader from '@/components/CommunityHeader.vue'
+import CommunityToolbar from '@/components/CommunityToolbar.vue'
 import FreeTagInput from '../components/FreeTagInput.vue'
 import LandmarkPicker from '../components/LandmarkPicker.vue'
 
@@ -409,6 +350,14 @@ const selectedFilterTags = ref([])
 const searchQuery = ref('')
 const adminOnly = ref(false)
 const hasAppliedDefault = ref(false)
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (filterLandmark.value) count += 1
+  if (selectedFilterTags.value.length) count += selectedFilterTags.value.length
+  if (searchQuery.value.trim()) count += 1
+  if (adminOnly.value) count += 1
+  return count
+})
 
 const posts = ref([])
 const landmarks = ref([])
@@ -995,6 +944,17 @@ function toggleAdminOnly() {
   adminOnly.value = !adminOnly.value
 }
 
+function clearFilters() {
+  filterLandmark.value = ''
+  selectedFilterTags.value = []
+  searchQuery.value = ''
+  adminOnly.value = false
+}
+
+function removeSelectedFilterTag(tag) {
+  selectedFilterTags.value = selectedFilterTags.value.filter(item => item !== tag)
+}
+
 function isLandmarkTag(tag) {
   return landmarks.value.some(lm => lm.name === tag)
 }
@@ -1005,7 +965,11 @@ function clickPostTag(tag) {
     selectedFilterTags.value = []
   } else {
     filterLandmark.value = ''
-    selectedFilterTags.value = [tag]
+    if (selectedFilterTags.value.includes(tag)) {
+      selectedFilterTags.value = selectedFilterTags.value.filter(item => item !== tag)
+    } else {
+      selectedFilterTags.value = [...selectedFilterTags.value, tag]
+    }
   }
 }
 
@@ -1430,7 +1394,6 @@ watch(commentOrder, () => {
 .community.modal-active .post-detail-body {
   overflow: hidden;
 }
-.page-pad.community.teleport-active > .community-header { display: none; }
 .scroll-top-btn {
   position: absolute;
   left: 18px;
@@ -1459,41 +1422,6 @@ watch(commentOrder, () => {
   object-fit: contain;
   pointer-events: none; /* ensure clicks go to the button */
 }
-.community-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 16px 0;
-  justify-content: space-between;
-}
-.publish-inline {
-  height: 38px;
-  padding: 0 16px;
-}
-
-/* container for publish button and hero image */
-.publish-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.publish-image {
-  position: relative;
-  width: 64px;
-}
-.publish-image img {
-  width: 100%;
-  display: block;
-  transform: translateZ(0);
-}
-
-/* make bottom of image overlap button slightly */
-.publish-wrapper .btn.publish-inline {
-  margin-top: -6px;
-}
-
 /* like button image wrapper */
 .like-wrapper {
   display: flex;
@@ -1519,44 +1447,6 @@ watch(commentOrder, () => {
   gap: 12px;
   width: 100%;
   max-width: 100%;
-}
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 0 0 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-}
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-}
-.toolbar-group .muted {
-  white-space: nowrap;
-}
-.toolbar-search {
-  flex: 1 1 320px;
-}
-.toolbar-search .input {
-  min-width: 220px;
-  width: 100%;
-}
-.toolbar-group.toolbar-tags {
-  flex: 1 1 280px;
-  min-width: 240px;
-  align-items: flex-start;
-}
-.toolbar-group.landmark {
-  flex: 0 0 280px;
-  min-width: 220px;
-}
-.tag-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 .post-list {
   display: flex;

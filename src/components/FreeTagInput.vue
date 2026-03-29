@@ -1,5 +1,5 @@
 <template>
-  <div class="free-tag-input">
+  <div class="free-tag-input" :class="{ compact }">
     <div class="free-tag-actions">
       <button v-if="!editing" class="btn ghost" type="button" @click="startEditing">
         {{ buttonText }}
@@ -41,7 +41,8 @@ const props = defineProps({
   buttonText: { type: String, default: '添加标签' },
   placeholder: { type: String, default: '输入标签' },
   emptyText: { type: String, default: '' },
-  maxTags: { type: Number, default: 0 }
+  maxTags: { type: Number, default: 0 },
+  compact: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -122,5 +123,28 @@ function removeTag(tag) {
 .free-tag-empty,
 .free-tag-count {
   font-size: 12px;
+}
+
+.free-tag-input.compact {
+  gap: 6px;
+}
+
+.free-tag-input.compact .free-tag-actions {
+  gap: 6px;
+}
+
+.free-tag-input.compact .free-tag-field {
+  min-width: 120px;
+}
+
+.free-tag-input.compact .btn {
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+
+.free-tag-input.compact .free-tag-chip {
+  background: rgba(0, 119, 255, 0.08);
+  color: var(--accent);
 }
 </style>

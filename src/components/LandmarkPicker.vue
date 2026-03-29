@@ -1,5 +1,5 @@
 <template>
-  <div class="lp-root">
+  <div class="lp-root" :class="{ 'lp-compact': compact }">
     <div class="lp-row">
       <div class="lp-input-wrap">
         <input
@@ -24,7 +24,7 @@
         type="button"
         @mousedown.prevent
         @click="toggleShowAll"
-      >{{ showAll ? '收起列表' : '查看所有地标' }}</button>
+      >{{ showAll ? '收起' : (compact ? '全部' : '查看所有地标') }}</button>
     </div>
 
     <Transition name="lp-drop">
@@ -64,7 +64,8 @@ const props = defineProps({
   modelValue: { type: Object, default: null },
   placeholder: { type: String, default: '搜索地标名称或别名...' },
   showSelectedTag: { type: Boolean, default: false },
-  selectedTagLabel: { type: String, default: '最终添加的地标' }
+  selectedTagLabel: { type: String, default: '最终添加的地标' },
+  compact: { type: Boolean, default: false }
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -236,6 +237,28 @@ function clearSelection() {
   cursor: pointer;
   background: #ff9800;
   color: #fff;
+}
+
+.lp-root.lp-compact .lp-row {
+  gap: 8px;
+  align-items: stretch;
+}
+
+.lp-root.lp-compact .lp-input {
+  min-height: 42px;
+  padding-right: 28px;
+  border-radius: 12px;
+}
+
+.lp-root.lp-compact .lp-all-btn {
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+
+.lp-root.lp-compact .lp-dropdown {
+  top: calc(100% + 6px);
+  border-radius: 14px;
 }
 
 /* Transition */
