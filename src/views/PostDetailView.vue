@@ -31,15 +31,40 @@
       <h2 class="post-sub-title" v-if="post.summary">{{ post.summary }}</h2>
     </div>
 
-    <!-- 头图（第一张图片） -->
-    <figure class="post-cover post-section" v-if="post.images?.length">
-      <img
-        :src="post.images[0]"
-        alt="头图"
-        class="post-cover-img"
-        @click="currentImage = 0; openImagePreview()"
-      />
-      <figcaption class="post-body-caption" :class="{ 'is-empty': !getCoverImageCaption() }">{{ getCoverImageCaption() || ' ' }}</figcaption>
+    <!-- 头图 -->
+    <figure
+      class="post-cover post-section"
+      v-if="post.coverImages?.length"
+      :class="{
+        'is-grid': post.coverImages.length > 1,
+        'count-2': post.coverImages.length === 2,
+        'count-3': post.coverImages.length === 3
+      }"
+    >
+      <template v-if="post.coverImages.length === 1">
+        <img
+          :src="post.coverImages[0]"
+          alt="头图"
+          class="post-cover-img"
+          @click="openImageAt(0)"
+        />
+      </template>
+      <template v-else>
+        <button
+          v-for="(img, idx) in post.coverImages"
+          :key="`cover-${idx}`"
+          class="post-cover-tile"
+          type="button"
+          @click="openImageAt(idx)"
+        >
+          <img :src="img" :alt="`头图 ${idx + 1}`" class="post-cover-grid-img" />
+        </button>
+      </template>
+      <figcaption
+        v-if="post.coverImages.length === 1"
+        class="post-body-caption"
+        :class="{ 'is-empty': !getCoverImageCaption() }"
+      >{{ getCoverImageCaption() || ' ' }}</figcaption>
     </figure>
 
     <!-- 正文（按段落/标题顺序） -->
@@ -51,15 +76,15 @@
     </div>
 
     <!-- 正文图片 -->
-    <div v-if="post.images?.length > 1" class="post-body-images post-section">
+    <div v-if="post.bodyImages?.length" class="post-body-images post-section">
       <figure
-        v-for="(img, idx) in post.images.slice(1)"
+        v-for="(img, idx) in post.bodyImages"
         :key="idx"
         class="post-body-figure"
-        @click="currentImage = idx + 1; openImagePreview()"
+        @click="openImageAt(post.coverImageCount + idx)"
       >
         <img :src="img" alt="正文图片" class="post-body-img" />
-        <figcaption class="post-body-caption" :class="{ 'is-empty': !getBodyImageCaption(idx + 1) }">{{ getBodyImageCaption(idx + 1) || ' ' }}</figcaption>
+        <figcaption class="post-body-caption" :class="{ 'is-empty': !getBodyImageCaption(idx) }">{{ getBodyImageCaption(idx) || ' ' }}</figcaption>
       </figure>
     </div>
 
@@ -145,6 +170,7 @@ const props = defineProps({ initialPostId: { type: [Number, String], default: 0 
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../services/api.js'
 import { useUserStore } from '../stores/userStore.js'
+import { resolvePostMedia } from '../utils/postMedia.js'
 const userStore = useUserStore()
 
 const route = useRoute()
@@ -231,13 +257,13 @@ function getShortContentLines() {
 }
 
 function getBodyImageCaption(imageIndex) {
-  const list = Array.isArray(post.value?.imageCaptions) ? post.value.imageCaptions : []
+  const list = Array.isArray(post.value?.bodyImageCaptions) ? post.value.bodyImageCaptions : []
   const text = String(list[imageIndex] || '').trim()
   return text
 }
 
 function getCoverImageCaption() {
-  const list = Array.isArray(post.value?.imageCaptions) ? post.value.imageCaptions : []
+  const list = Array.isArray(post.value?.coverCaptions) ? post.value.coverCaptions : []
   const explicit = String(list[0] || '').trim()
   if (explicit) return explicit
 
@@ -327,7 +353,7 @@ async function loadPost() {
         return String(captionsFromImageObjects[idx] || '').trim()
       })
 
-      return {
+      const postData = {
         id: src.id || src._id || src.post_id || null,
         title: src.title || '',
         content: src.content || src.body || src.caption || '',
@@ -338,11 +364,14 @@ async function loadPost() {
         },
         images: normalizedImages,
         imageCaptions: mergedCaptions,
+        coverMode: src.cover_mode || src.coverMode || 'manual',
+        coverImageCount: src.cover_image_count ?? src.coverImageCount ?? 0,
         tags: src.tags || src.tag_list || [],
         parent: src.parent_post || src.parent || null,
         likes: typeof src.like_count !== 'undefined' ? src.like_count : (src.likes || 0),
         liked: !!src.liked
       }
+      return { ...postData, ...resolvePostMedia(postData) }
     }
     post.value = normalizeApiPost(raw)
     // reset image index when a new post is loaded
@@ -423,6 +452,10 @@ function openImagePreview() {
   previewSrc.value = src
   previewName.value = `post-${post.value?.id || 'image'}-${currentImage.value + 1}.jpg`
   previewOpen.value = true
+}
+function openImageAt(index) {
+  currentImage.value = Number(index || 0)
+  openImagePreview()
 }
 function closeImagePreview() { previewOpen.value = false; previewSrc.value = ''; previewName.value = '' }
 
@@ -552,6 +585,26 @@ onMounted(() => {
 
 /* ---- 头图 ---- */
 .post-cover { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.post-cover.is-grid {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  align-items: stretch;
+}
+.post-cover.is-grid.count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.post-cover.is-grid.count-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.post-cover-tile {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  border-radius: 10px;
+}
 .post-cover-img {
   width: min(100%, var(--media-max-width));
   max-height: 480px;
@@ -559,6 +612,12 @@ onMounted(() => {
   display: block;
   cursor: zoom-in;
   border-radius: 10px;
+}
+.post-cover-grid-img {
+  width: 100%;
+  height: 320px;
+  object-fit: cover;
+  display: block;
 }
 
 /* ---- 正文 ---- */
@@ -684,9 +743,11 @@ onMounted(() => {
 
 @media (max-width: 900px) {
   .post-detail-page { padding: 12px }
+  .post-cover-grid-img { height: 220px; }
 }
 
 @media (max-width: 480px) {
+  .post-cover-grid-img { height: 160px; }
   .image-preview {
     width: calc(100vw - 24px);
     border-radius: 10px;

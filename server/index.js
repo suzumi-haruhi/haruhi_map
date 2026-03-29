@@ -86,6 +86,37 @@ function mapFileUrl(rel) {
 	return `/api/uploads/${rel}`.replace(/\\/g, '/')
 }
 
+function normalizeIncomingPostCover(imageCount, modeRaw, countRaw) {
+	if (!imageCount) {
+		return { cover_mode: 'manual', cover_image_count: 0 }
+	}
+	const coverMode = String(modeRaw || '').trim().toLowerCase() === 'auto' ? 'auto' : 'manual'
+	if (coverMode === 'auto') {
+		const maxCount = Math.min(3, imageCount)
+		return {
+			cover_mode: 'auto',
+			cover_image_count: clampInt(countRaw, 1, maxCount, maxCount)
+		}
+	}
+	return { cover_mode: 'manual', cover_image_count: 1 }
+}
+
+function serializePostCover(post) {
+	const imageCount = Array.isArray(post?.images) ? post.images.length : 0
+	if (!imageCount) {
+		return { cover_mode: 'manual', cover_image_count: 0 }
+	}
+	const coverMode = String(post?.cover_mode || '').trim().toLowerCase() === 'auto' ? 'auto' : 'manual'
+	if (coverMode === 'auto') {
+		const maxCount = Math.min(3, imageCount)
+		return {
+			cover_mode: 'auto',
+			cover_image_count: clampInt(post?.cover_image_count, 1, maxCount, maxCount)
+		}
+	}
+	return { cover_mode: 'manual', cover_image_count: 1 }
+}
+
 function isLatLngValid(lat, lng) {
 	const a = Number(lat)
 	const b = Number(lng)
@@ -536,6 +567,7 @@ app.get('/api/user/post-likes', async (req, res) => {
 		created_at: p.created_at,
 		images: (p.images || []).map(i => mapFileUrl(i.file_path)),
 		image_captions: (p.images || []).map(i => String(i.caption || '')),
+		...serializePostCover(p),
 		tags: (p.tags || []).map(t => t.tag)
 	})) })
 })
@@ -553,6 +585,7 @@ app.get('/api/user/posts', async (req, res) => {
 		created_at: p.created_at,
 		images: (p.images || []).map(i => mapFileUrl(i.file_path)),
 		image_captions: (p.images || []).map(i => String(i.caption || '')),
+		...serializePostCover(p),
 		tags: (p.tags || []).map(t => t.tag)
 	})) })
 })
@@ -569,6 +602,8 @@ app.get('/api/user/post-comments', async (req, res) => {
 		post_content: c.post_content,
 		post_created_at: c.post_created_at,
 		post_images: (c.post_images || []).map(i => mapFileUrl(i.file_path)),
+		post_cover_mode: c.post_cover_mode || 'manual',
+		post_cover_image_count: Number.isFinite(Number(c.post_cover_image_count)) ? Number(c.post_cover_image_count) : 0,
 		post_tags: (c.post_tags || []).map(t => t.tag)
 	})) })
 })
@@ -612,6 +647,7 @@ app.get('/api/posts', async (req, res) => {
 			created_at: p.created_at,
 			images: (p.images || []).map(i => mapFileUrl(i.file_path)),
 			image_captions: (p.images || []).map(i => String(i.caption || '')),
+			...serializePostCover(p),
 			tags: (p.tags || []).map(t => t.tag)
 		}))
 	})
@@ -648,6 +684,7 @@ app.get('/api/posts/:id', async (req, res) => {
 			created_at: row.created_at,
 			images: (row.images || []).map(i => mapFileUrl(i.file_path)),
 			image_captions: (row.images || []).map(i => String(i.caption || '')),
+			...serializePostCover(row),
 			tags: (row.tags || []).map(t => t.tag)
 		}
 	})
@@ -814,6 +851,7 @@ app.post('/api/posts', handleUpload(postUpload), async (req, res) => {
 	const title = String(req.body.title || '').trim()
 	const normalTagsRaw = String(req.body.normal_tags || '[]')
 	const imageCaptionsRaw = String(req.body.image_captions || '[]')
+	const requestedCover = normalizeIncomingPostCover(files.length, req.body.cover_mode, req.body.cover_image_count)
 	const landmarkId = req.body.landmark_id ? Number(req.body.landmark_id) : null
 	const parentPostId = req.body.parent_post_id ? Number(req.body.parent_post_id) : null
 
@@ -873,7 +911,9 @@ app.post('/api/posts', handleUpload(postUpload), async (req, res) => {
 		content,
 		summary,
 		title,
-		status
+		status,
+		cover_mode: requestedCover.cover_mode,
+		cover_image_count: requestedCover.cover_image_count
 	})
 
 	const relPaths = files.map(f => path.relative(uploadsDir, f.path))
@@ -915,6 +955,7 @@ app.post('/api/posts', handleUpload(postUpload), async (req, res) => {
 			created_at: row.created_at,
 			images: relPaths.map(mapFileUrl),
 			image_captions: cleanedImageCaptions,
+			...requestedCover,
 			tags: tagsToAdd.map(t => t.tag)
 		}
 	})
@@ -943,6 +984,7 @@ app.get('/api/admin/posts', async (req, res) => {
 			created_at: p.created_at,
 			images: (p.images || []).map(i => mapFileUrl(i.file_path)),
 			image_captions: (p.images || []).map(i => String(i.caption || '')),
+			...serializePostCover(p),
 			tags: (p.tags || []).map(t => t.tag)
 		}))
 	})
@@ -1009,6 +1051,7 @@ app.post('/api/admin/posts', (req, res, next) => {
 	const title = String(req.body.title || '').trim()
 	const normalTagsRaw = String(req.body.normal_tags || '[]')
 	const imageCaptionsRaw = String(req.body.image_captions || '[]')
+	const requestedCover = normalizeIncomingPostCover(files.length, req.body.cover_mode, req.body.cover_image_count)
 	const landmarkId = req.body.landmark_id ? Number(req.body.landmark_id) : null
 	const parentPostId = req.body.parent_post_id ? Number(req.body.parent_post_id) : null
 
@@ -1076,7 +1119,9 @@ app.post('/api/admin/posts', (req, res, next) => {
 		content,
 		summary,
 		title,
-		status: 'approved'
+		status: 'approved',
+		cover_mode: requestedCover.cover_mode,
+		cover_image_count: requestedCover.cover_image_count
 	})
 
 	const relPaths = files.map(f => path.relative(uploadsDir, f.path))
@@ -1111,6 +1156,7 @@ app.post('/api/admin/posts', (req, res, next) => {
 			created_at: row.created_at,
 			images: relPaths.map(mapFileUrl),
 			image_captions: cleanedImageCaptions,
+			...requestedCover,
 			tags: tagsToAdd.map(t => t.tag)
 		}
 	})

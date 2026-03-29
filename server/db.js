@@ -198,6 +198,12 @@ export async function initDb(dbPath) {
   if (!postCols.find(c => c.name === 'summary')) {
     await _db.exec(`ALTER TABLE posts ADD COLUMN summary TEXT`)
   }
+  if (!postCols.find(c => c.name === 'cover_mode')) {
+    await _db.exec(`ALTER TABLE posts ADD COLUMN cover_mode TEXT DEFAULT 'manual'`)
+  }
+  if (!postCols.find(c => c.name === 'cover_image_count')) {
+    await _db.exec(`ALTER TABLE posts ADD COLUMN cover_image_count INTEGER DEFAULT 1`)
+  }
 
   await _db.exec(`
     CREATE TABLE IF NOT EXISTS post_images (
@@ -567,12 +573,37 @@ export async function listUserComments(anonId, limit = 50) {
 
 export async function createPost(payload) {
   const db = getDb()
-  const { anon_id, user_name, user_type, landmark_id, parent_post_id, content, summary, title, status = 'approved' } = payload
+  const {
+    anon_id,
+    user_name,
+    user_type,
+    landmark_id,
+    parent_post_id,
+    content,
+    summary,
+    title,
+    status = 'approved',
+    cover_mode = 'manual',
+    cover_image_count = 1
+  } = payload
   const ts = now()
   const res = await db.run(
-    `INSERT INTO posts (anon_id, user_name, user_type, landmark_id, parent_post_id, content, summary, title, status, like_count, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-    [anon_id, user_name, user_type, landmark_id ?? null, parent_post_id ?? null, content, summary || null, title || null, status, ts]
+    `INSERT INTO posts (anon_id, user_name, user_type, landmark_id, parent_post_id, content, summary, title, status, cover_mode, cover_image_count, like_count, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+    [
+      anon_id,
+      user_name,
+      user_type,
+      landmark_id ?? null,
+      parent_post_id ?? null,
+      content,
+      summary || null,
+      title || null,
+      status,
+      cover_mode || 'manual',
+      Number.isFinite(Number(cover_image_count)) ? Number(cover_image_count) : 1,
+      ts
+    ]
   )
   return db.get(`SELECT * FROM posts WHERE id=?`, [res.lastID])
 }
@@ -704,7 +735,8 @@ export async function listUserPosts(anonId, limit = 50) {
 export async function listUserPostComments(anonId, limit = 100) {
   const db = getDb()
   const rows = await db.all(
-    `SELECT pc.*, p.content AS post_content, p.created_at AS post_created_at
+    `SELECT pc.*, p.content AS post_content, p.created_at AS post_created_at,
+            p.cover_mode AS post_cover_mode, p.cover_image_count AS post_cover_image_count
      FROM post_comments pc
      LEFT JOIN posts p ON p.id = pc.post_id
      WHERE pc.anon_id=?
@@ -743,7 +775,9 @@ export async function listUserPostComments(anonId, limit = 100) {
   return rows.map(r => ({
     ...r,
     post_images: postMeta.get(r.post_id)?.images || [],
-    post_tags: postMeta.get(r.post_id)?.tags || []
+    post_tags: postMeta.get(r.post_id)?.tags || [],
+    post_cover_mode: r.post_cover_mode || 'manual',
+    post_cover_image_count: Number.isFinite(Number(r.post_cover_image_count)) ? Number(r.post_cover_image_count) : 0
   }))
 }
 

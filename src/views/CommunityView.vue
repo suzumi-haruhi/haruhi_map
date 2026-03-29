@@ -57,8 +57,23 @@
             @click="openPost(post)"
           >
           <!-- 头图 -->
-          <div v-if="post.images && post.images.length" class="wf-cover">
-            <img :src="post.images[0]" alt="cover" loading="lazy" />
+          <div
+            v-if="post.coverImages && post.coverImages.length"
+            class="wf-cover"
+            :class="{
+              'is-grid': post.coverImages.length > 1,
+              'count-2': post.coverImages.length === 2,
+              'count-3': post.coverImages.length === 3
+            }"
+          >
+            <template v-if="post.coverImages.length === 1">
+              <img :src="post.coverImages[0]" alt="cover" loading="lazy" />
+            </template>
+            <template v-else>
+              <div v-for="(img, idx) in post.coverImages" :key="`${post.id}-cover-${idx}`" class="wf-cover-tile">
+                <img :src="img" alt="cover" loading="lazy" />
+              </div>
+            </template>
           </div>
 
           <div class="wf-body">
@@ -253,12 +268,27 @@
                   <h2 v-if="previewSummary" class="preview-sub-title">{{ previewSummary }}</h2>
                 </div>
 
-                <figure v-if="publishCoverPreview" class="preview-cover-figure">
-                  <img :src="publishCoverPreview" alt="cover" class="preview-cover-img" />
+                <figure
+                  v-if="previewCoverImages.length"
+                  class="preview-cover-figure"
+                  :class="{
+                    'is-grid': previewCoverImages.length > 1,
+                    'count-2': previewCoverImages.length === 2,
+                    'count-3': previewCoverImages.length === 3
+                  }"
+                >
+                  <template v-if="previewCoverImages.length === 1">
+                    <img :src="previewCoverImages[0].src" alt="cover" class="preview-cover-img" />
+                  </template>
+                  <template v-else>
+                    <div v-for="(item, idx) in previewCoverImages" :key="`preview-cover-${idx}`" class="preview-cover-tile">
+                      <img :src="item.src" alt="cover" class="preview-cover-grid-img" />
+                    </div>
+                  </template>
                 </figure>
 
                 <div class="preview-body">
-                  <template v-for="(item, idx) in previewContentBlocks" :key="`pv-${idx}`">
+                  <template v-for="(item, idx) in previewBodyBlocks" :key="`pv-${idx}`">
                     <h3 v-if="item.type === 'subtitle'" class="preview-body-heading">{{ item.text }}</h3>
                     <p v-else-if="item.type === 'paragraph'" class="preview-body-para">{{ item.text }}</p>
                     <figure v-else class="preview-body-figure">
@@ -312,6 +342,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/userStore.js'
 import { api } from '../services/api.js'
 import { compressFile } from '../utils/imageCompressor.js'
+import { resolvePostMedia } from '../utils/postMedia.js'
 import CommunityToolbar from '@/components/CommunityToolbar.vue'
 import FreeTagInput from '../components/FreeTagInput.vue'
 import LandmarkPicker from '../components/LandmarkPicker.vue'
@@ -537,6 +568,24 @@ const previewContentBlocks = computed(() => {
     }
   }
   return out
+})
+const previewCoverImages = computed(() => {
+  const bodyImageItems = previewContentBlocks.value.filter(item => item.type === 'image')
+  if (publishCoverPreview.value) {
+    return [{ src: publishCoverPreview.value, caption: '' }]
+  }
+  return bodyImageItems.slice(0, Math.min(3, bodyImageItems.length))
+})
+const previewBodyBlocks = computed(() => {
+  let remainingAutoCoverImages = publishCoverPreview.value ? 0 : previewCoverImages.value.length
+  return previewContentBlocks.value.filter((item) => {
+    if (item.type !== 'image') return true
+    if (remainingAutoCoverImages > 0) {
+      remainingAutoCoverImages -= 1
+      return false
+    }
+    return true
+  })
 })
 
 // scroll-top 按钮样式数据与定位逻辑
@@ -1072,6 +1121,8 @@ async function submitPost() {
   const summary = String(publishSummary.value || '').trim()
   const title = String(publishTitle.value || '').trim()
   const totalImages = (publishCoverFile.value ? 1 : 0) + imageFiles.length
+  const coverMode = publishCoverFile.value ? 'manual' : (imageFiles.length ? 'auto' : 'manual')
+  const coverImageCount = publishCoverFile.value ? 1 : Math.min(3, imageFiles.length)
 
   if (!content && !totalImages) {
     publishMsg.value = '请输入正文内容或添加图片'
@@ -1101,6 +1152,8 @@ async function submitPost() {
     if (summary) fd.append('summary', summary)
     if (title) fd.append('title', title)
     if (publishLandmark.value?.id) fd.append('landmark_id', publishLandmark.value.id)
+    fd.append('cover_mode', coverMode)
+    fd.append('cover_image_count', String(coverImageCount))
     fd.append('normal_tags', JSON.stringify(selectedNormalTags.value))
     if (replyParent.value?.id) fd.append('parent_post_id', replyParent.value.id)
 
@@ -1168,7 +1221,7 @@ function mapPost(p, fallbackParent = null) {
   const parentId = p.parent_post_id || p.parent_id || p.parentId || p.parentPostId || null
   const parent = normalizeParent(p.parent || p.parent_post || p.parentPost || fallbackParent)
   if (parent?.id) parentCache.set(parent.id, parent)
-  return {
+  const post = {
     id: p.id,
     user: { name: p.user_name, avatar: p.user_avatar_url || '' },
     createdAt: p.created_at,
@@ -1178,6 +1231,8 @@ function mapPost(p, fallbackParent = null) {
     title: p.title || '',
     summary: p.summary || '',
     imageCaptions: p.image_captions || p.imageCaptions || [],
+    coverMode: p.cover_mode || p.coverMode || 'manual',
+    coverImageCount: p.cover_image_count ?? p.coverImageCount ?? 0,
     tags: p.tags || [],
     images: p.images || [],
     comments: [],
@@ -1185,6 +1240,7 @@ function mapPost(p, fallbackParent = null) {
     parentId: parent?.id || parentId || null,
     landmarkId: p.landmark_id ?? p.landmarkId ?? null
   }
+  return { ...post, ...resolvePostMedia(post) }
 }
 
 async function ensureParent(post) {
@@ -1653,12 +1709,35 @@ watch(commentOrder, () => {
   align-items: center;
   gap: 8px;
 }
+.preview-cover-figure.is-grid {
+  width: min(100%, 860px);
+  align-self: center;
+  display: grid;
+  gap: 6px;
+}
+.preview-cover-figure.count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.preview-cover-figure.count-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.preview-cover-tile {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 10px;
+}
 
 .preview-cover-img,
 .preview-body-img {
   width: min(100%, 860px);
   max-height: 460px;
   border-radius: 10px;
+  object-fit: cover;
+  display: block;
+}
+.preview-cover-grid-img {
+  width: 100%;
+  height: 300px;
   object-fit: cover;
   display: block;
 }
@@ -2120,6 +2199,24 @@ watch(commentOrder, () => {
   border-radius: 8px 8px 0 0;
   line-height: 0;
   max-height: 400px;
+  background: rgba(10, 18, 30, 0.94);
+  display: grid;
+  grid-template-columns: 1fr;
+}
+.wf-cover.is-grid {
+  gap: 4px;
+  padding: 4px;
+}
+.wf-cover.count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.wf-cover.count-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.wf-cover-tile {
+  overflow: hidden;
+  min-width: 0;
+  border-radius: 6px;
 }
 .wf-cover img {
   width: 100%;
@@ -2127,6 +2224,12 @@ watch(commentOrder, () => {
   display: block;
   object-fit: cover;
   transition: transform 240ms ease;
+}
+.wf-cover.count-2 img {
+  height: 320px;
+}
+.wf-cover.count-3 img {
+  height: 260px;
 }
 .post-card:hover .wf-cover img {
   transform: scale(1.02);
@@ -2260,6 +2363,10 @@ watch(commentOrder, () => {
   }
   .wf-cover img {
     height: 220px;
+  }
+  .wf-cover.count-2 img,
+  .wf-cover.count-3 img {
+    height: 180px;
   }
 }
 .post-head {

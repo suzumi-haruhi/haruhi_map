@@ -289,6 +289,46 @@ function createMockCatalog(files) {
         createdAt: timestamp(26)
       },
       {
+        key: 'post-auto-cover-2',
+        anonId: 'user:mock_kyon',
+        userName: 'mock_kyon',
+        userType: 'formal',
+        landmarkKey: 'kyoto-station',
+        title: `${MOCK_PREFIX}自动双栏封面样例`,
+        summary: '测试未设置头图时由正文前两张图组成双栏封面。',
+        content: '这是一条专门测试自动双栏封面的帖子。正文里的前两张图会被提取为封面，正文区不再重复展示它们。',
+        status: 'approved',
+        coverMode: 'auto',
+        coverImageCount: 2,
+        images: [
+          { filePath: resolve('postB'), caption: '站前广场右侧' },
+          { filePath: resolve('postC'), caption: '站前导视牌' }
+        ],
+        tags: [{ tag: `${MOCK_PREFIX}京都站前广场`, tagType: 'landmark' }, { tag: '自动封面', tagType: 'normal' }, { tag: '双栏', tagType: 'normal' }],
+        createdAt: timestamp(24)
+      },
+      {
+        key: 'post-auto-cover-3',
+        anonId: 'user:mock_mikuru',
+        userName: 'mock_mikuru',
+        userType: 'formal',
+        landmarkKey: 'fushimi',
+        title: `${MOCK_PREFIX}自动三栏封面样例`,
+        summary: '测试未设置头图时由正文前三张图组成三栏封面。',
+        content: '这是一条专门测试自动三栏封面的帖子。前三张正文图会并排作为封面，第四张图片会继续保留在正文图片区里。',
+        status: 'approved',
+        coverMode: 'auto',
+        coverImageCount: 3,
+        images: [
+          { filePath: resolve('postA'), caption: '参道入口近景' },
+          { filePath: resolve('postB'), caption: '参道入口中景' },
+          { filePath: resolve('postC'), caption: '参道入口远景' },
+          { filePath: resolve('postD'), caption: '第四张仍应留在正文' }
+        ],
+        tags: [{ tag: `${MOCK_PREFIX}伏见稻荷参道`, tagType: 'landmark' }, { tag: '自动封面', tagType: 'normal' }, { tag: '三栏', tagType: 'normal' }],
+        createdAt: timestamp(23)
+      },
+      {
         key: 'post-pending',
         anonId: 'user:mock_mikuru',
         userName: 'mock_mikuru',
@@ -476,9 +516,16 @@ async function insertPhotoComment(db, comment, photoId) {
 }
 
 async function insertPost(db, post, landmarkId, parentPostId) {
+  const imageCount = Array.isArray(post.images) ? post.images.length : 0
+  const coverMode = post.coverMode === 'auto' && imageCount ? 'auto' : 'manual'
+  const coverImageCount = imageCount
+    ? (coverMode === 'auto'
+        ? Math.max(1, Math.min(3, Number(post.coverImageCount) || imageCount))
+        : 1)
+    : 0
   const result = await db.run(
-    `INSERT INTO posts (anon_id, user_name, user_type, landmark_id, parent_post_id, content, summary, title, status, like_count, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+    `INSERT INTO posts (anon_id, user_name, user_type, landmark_id, parent_post_id, content, summary, title, status, cover_mode, cover_image_count, like_count, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
     [
       post.anonId,
       post.userName,
@@ -489,6 +536,8 @@ async function insertPost(db, post, landmarkId, parentPostId) {
       post.summary,
       post.title,
       post.status,
+      coverMode,
+      coverImageCount,
       post.createdAt
     ]
   )
