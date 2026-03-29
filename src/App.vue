@@ -2,7 +2,7 @@
   <div class="app-shell" ref="appShell">
     <header class="top-header" ref="topHeader" :class="{ 'admin-header': isAdminRoute }">
       <nav class="top-nav">
-        <RouterLink to="/" class="nav-link">地图</RouterLink>
+        <RouterLink to="/" class="nav-link" @click="handleMapTabClick">地图</RouterLink>
         <RouterLink to="/landmarks" class="nav-link">圣地列表</RouterLink>
         <RouterLink to="/user" class="nav-link">我的信息</RouterLink>
         <RouterLink to="/admin" class="nav-link">管理员界面</RouterLink>
@@ -45,6 +45,7 @@ import { useUserStore } from './stores/userStore.js'
 const userStore = useUserStore()
 const { user, ready, error } = storeToRefs(userStore)
 const route = useRoute()
+const MAP_TAB_EVENT = 'haruhi:map-tab-click'
 
 const formalId = ref('')
 const formalPwd = ref('')
@@ -60,6 +61,7 @@ const goMainSite = () => {
 const canLogin = computed(() => String(formalId.value || '').trim() && String(formalPwd.value || '').trim())
 const canAnonLogin = computed(() => String(anonNickname.value || '').trim())
 const isAdminRoute = computed(() => route.name === 'admin')
+const isPlainMapRoute = computed(() => route.name === 'map' && route.path === '/' && !Object.keys(route.query || {}).length)
 
 async function handleLogin() {
   if (!canLogin.value) return
@@ -82,6 +84,13 @@ async function handleAnonymous() {
 
 function handleSessionInvalidated() {
   userStore.init()
+}
+
+function handleMapTabClick(event) {
+  window.dispatchEvent(new CustomEvent(MAP_TAB_EVENT))
+  if (isPlainMapRoute.value) {
+    event.preventDefault()
+  }
 }
 
 onMounted(() => {

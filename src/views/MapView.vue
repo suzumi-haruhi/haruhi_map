@@ -96,12 +96,14 @@ const searchFocusId = ref(null)
 const searchFocusTick = ref(0)
 const panelLevel = ref(1)
 const resizeTick = ref(0)
+const MAP_TAB_EVENT = 'haruhi:map-tab-click'
 
 const route = useRoute()
 const router = useRouter()
 const postRouteActive = ref(false)
 const communityRef = ref(null)
 const lastOpenedPostId = ref(null)
+let shouldOpenPanelAfterLeavingPost = false
 
 async function onMarkerSelect(id) {
   if (!id) return
@@ -245,6 +247,14 @@ function activateCommunity() {
   }
 }
 
+function handleMapTabClick() {
+  if (postRouteActive.value || route.name === 'postDetail') {
+    shouldOpenPanelAfterLeavingPost = true
+    return
+  }
+  activateCommunity()
+}
+
 // When LandmarkDetailView requests to open related posts from the map-right-pane,
 // first close the detail pane, then open the community panel after the leave animation.
 function onLandmarkOpenRelated() {
@@ -294,6 +304,7 @@ onMounted(() => {
   }
   gallery.loadLandmarks()
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener(MAP_TAB_EVENT, handleMapTabClick)
   if (route.query.landmarkId) {
     const id = Number(route.query.landmarkId)
     if (id) onMarkerSelect(id)
@@ -345,7 +356,8 @@ watch(() => route.fullPath, async (nv, ov) => {
       // 离开帖子详情时恢复之前的面板状态（若有）
       // 注意：postRouteActive 将在 Transition 的 after-leave 回调中被清除以允许动画执行
       const lm = Number(route.query.landmarkId)
-      const restoreTo = lm ? 0 : ((_prevPanelLevel == null) ? 1 : _prevPanelLevel)
+      const restoreTo = lm ? 0 : (shouldOpenPanelAfterLeavingPost ? 1 : ((_prevPanelLevel == null) ? 1 : _prevPanelLevel))
+      shouldOpenPanelAfterLeavingPost = false
       _prevPanelLevel = null
       // 恢复面板（延迟以等待过渡完成）
       setTimeout(() => { panelLevel.value = restoreTo }, 50)
@@ -360,6 +372,7 @@ watch(() => route.fullPath, async (nv, ov) => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener(MAP_TAB_EVENT, handleMapTabClick)
 })
 
 watch(selectedId, () => {
