@@ -14,7 +14,7 @@
       </div>
 
       <div class="toolbar-actions">
-        <details class="toolbar-settings toolbar-settings-inline">
+        <details ref="toolbarSettingsRef" class="toolbar-settings toolbar-settings-inline">
           <summary class="btn ghost toolbar-settings-trigger">
             <span class="toolbar-settings-current">{{ settingsButtonLabel }}</span>
             <span v-if="adminOnly" class="toolbar-settings-flag">管理员</span>
@@ -74,7 +74,7 @@
                 type="button"
                 @click="$emit('toggle-admin-only')"
               >
-                {{ adminOnly ? '只看管理员' : '显示全部帖子' }}
+                只看管理员
               </button>
             </div>
           </div>
@@ -136,7 +136,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import LandmarkPicker from './LandmarkPicker.vue'
 
 const props = defineProps({
@@ -162,6 +162,8 @@ const emit = defineEmits([
   'clear-filters',
   'open-publish'
 ])
+
+const toolbarSettingsRef = ref(null)
 
 const sortByModel = computed({
   get: () => props.sortBy,
@@ -194,10 +196,27 @@ function setSortBy(value) {
 function setSortOrder(value) {
   emit('update:sortOrder', value)
 }
+
+function handleOutsidePointerDown(event) {
+  const detailsEl = toolbarSettingsRef.value
+  if (!detailsEl?.open) return
+  if (detailsEl.contains(event.target)) return
+  detailsEl.open = false
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleOutsidePointerDown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleOutsidePointerDown)
+})
 </script>
 
 <style scoped>
 .community-toolbar-card {
+  position: relative;
+  z-index: 1200;
   margin: 0 16px;
   padding: 14px;
   border: 1px solid rgba(0, 119, 255, 0.12);
@@ -381,6 +400,7 @@ function setSortOrder(value) {
 
 .toolbar-settings {
   position: relative;
+  z-index: 1;
 }
 
 .toolbar-settings-inline {
@@ -436,7 +456,7 @@ function setSortOrder(value) {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 60;
+  z-index: 1210;
   width: min(320px, calc(100vw - 48px));
   display: flex;
   flex-direction: column;
