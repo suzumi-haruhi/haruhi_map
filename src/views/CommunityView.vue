@@ -48,7 +48,7 @@
 
     <div class="community-main">
 
-      <div class="post-list">
+      <TransitionGroup name="post-filter" tag="div" class="post-list">
         <article
             v-for="post in sortedPosts"
             :key="post.id"
@@ -128,7 +128,7 @@
             </div>
           </div>
         </article>
-      </div>
+      </TransitionGroup>
     </div>
 
     <!-- 详情页已迁移至独立路由 /posts/:id，overlay 已移除 -->
@@ -1578,6 +1578,7 @@ watch(commentOrder, () => {
   max-width: 860px;
   margin: 0 auto;
   padding: 12px 0 16px;
+  position: relative;
 }
 .post-detail-panel {
   position: absolute;
@@ -2192,6 +2193,41 @@ watch(commentOrder, () => {
   z-index: 1100;
   box-shadow: 0 14px 40px rgba(6,12,20,0.16);
   border-color: rgba(0,119,255,0.8);
+}
+.post-filter-enter-active,
+.post-filter-leave-active {
+  transition:
+    opacity 280ms cubic-bezier(.22,.9,.36,1),
+    transform 340ms cubic-bezier(.22,.9,.36,1),
+    filter 320ms cubic-bezier(.2,.8,.2,1);
+  will-change: transform, opacity, filter;
+  transform-origin: center top;
+}
+.post-filter-move {
+  transition: transform 300ms cubic-bezier(.22,.9,.36,1);
+}
+.post-filter-enter-from {
+  opacity: 0;
+  transform: translateY(24px) scale(0.972);
+  filter: blur(10px) saturate(0.82);
+}
+.post-filter-enter-to,
+.post-filter-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0) saturate(1);
+}
+.post-filter-leave-to {
+  opacity: 0;
+  transform: translateY(20px) scale(0.978);
+  filter: blur(12px) saturate(0.78);
+}
+.post-filter-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  pointer-events: none;
 }
 .wf-cover {
   width: 100%;
