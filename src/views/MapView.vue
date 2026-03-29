@@ -347,7 +347,7 @@ watch(() => route.fullPath, async (nv, ov) => {
         }
       } catch (e) {}
       // 若路由携带地标 id，则将地图视角飞到该地标（不打开详情面板，避免与帖子详情并列）
-      const lm = Number(route.query.landmarkId)
+      const lm = Number(route.query.landmarkId || route.query.focusLandmarkId)
       if (lm) {
         searchFocusId.value = lm
         searchFocusTick.value += 1

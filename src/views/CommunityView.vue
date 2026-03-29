@@ -616,7 +616,7 @@ onUnmounted(() => {
 function openPost(post) {
   if (!props.preventRoutePush) {
     const query = {}
-    if (post.landmarkId) query.landmarkId = String(post.landmarkId)
+    if (post.landmarkId) query.focusLandmarkId = String(post.landmarkId)
     router.push({ path: `/posts/${post.id}`, query }).catch(() => {})
     return
   }
