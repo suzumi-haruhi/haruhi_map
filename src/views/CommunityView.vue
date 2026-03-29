@@ -545,6 +545,7 @@ let ro = null
 let containerScrollEl = null
 // pinnedLeft: when set, keep horizontal position stable (prevents jumps when posts open/close)
 let pinnedLeft = null
+const scrollTopAnimations = new WeakMap()
 
 function updateScrollBtnPos() {
   const container = document.querySelector('.page-pad.community')
@@ -687,51 +688,113 @@ function closePost() {
   emit('exit-detail')
 }
 
-// 将社区页面（社区容器或主滚动区域）滚动到顶部
-function scrollCommunityTop() {
-  // 调试输出，查看按钮是否触发
-  // 优先滚动最近的可滚动社区容器
-  // 优先查找嵌入模式下的社区滚动容器
-  const paneBody = document.querySelector('.community-pane-body');
-  if (paneBody && paneBody.scrollHeight > paneBody.clientHeight) {
-    try {
-      if (typeof paneBody.scrollTo === 'function') {
-        paneBody.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        paneBody.scrollTop = 0;
-      }
-    } catch (e) {
-      paneBody.scrollTop = 0;
+function animateScrollTop(el, top = 0) {
+  return new Promise((resolve) => {
+    if (!el) {
+      resolve(false)
+      return
     }
-    return;
+
+    const startTop = Number(el.scrollTop || 0)
+    const targetTop = Math.max(0, Number(top || 0))
+    const distance = targetTop - startTop
+    if (Math.abs(distance) < 2) {
+      el.scrollTop = targetTop
+      resolve(true)
+      return
+    }
+
+    try {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        el.scrollTop = targetTop
+        resolve(true)
+        return
+      }
+    } catch (e) {}
+
+    const previousState = scrollTopAnimations.get(el)
+    if (previousState?.frame) cancelAnimationFrame(previousState.frame)
+    if (previousState?.resolve) previousState.resolve(false)
+
+    const duration = Math.min(760, Math.max(420, Math.abs(distance) * 0.5))
+    const startTime = performance.now()
+    const easeOutQuint = (t) => 1 - Math.pow(1 - t, 5)
+
+    const finish = (completed) => {
+      const activeState = scrollTopAnimations.get(el)
+      if (activeState === state) {
+        scrollTopAnimations.delete(el)
+      }
+      resolve(completed)
+    }
+
+    const step = (now) => {
+      const progress = Math.min(1, (now - startTime) / duration)
+      el.scrollTop = startTop + distance * easeOutQuint(progress)
+      if (progress < 1) {
+        state.frame = requestAnimationFrame(step)
+        scrollTopAnimations.set(el, state)
+        return
+      }
+      el.scrollTop = targetTop
+      finish(true)
+    }
+
+    const state = {
+      frame: 0,
+      resolve: finish
+    }
+
+    state.frame = requestAnimationFrame(step)
+    scrollTopAnimations.set(el, state)
+  })
+}
+
+function isScrollableCommunityEl(el) {
+  if (!el) return false
+  const style = getComputedStyle(el)
+  const overflowY = style.overflowY
+  return (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight
+}
+
+function getCommunityScrollTarget() {
+  const paneBody = document.querySelector('.community-pane-body')
+  if (paneBody && paneBody.scrollHeight > paneBody.clientHeight) {
+    return paneBody
   }
-  // 兼容独立页面和其他容器
+
   const candidates = [
     document.querySelector('.community-pane'),
     document.querySelector('.community-scroll'),
     document.querySelector('.post-list'),
     document.querySelector('.community-main'),
     document.querySelector('.page-pad.community')
-  ];
-  function isScrollable(el) {
-    if (!el) return false;
-    const style = getComputedStyle(el);
-    const overflowY = style.overflowY;
-    return (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+  ]
+
+  return candidates.find(el => isScrollableCommunityEl(el)) || null
+}
+
+// 将社区页面（社区容器或主滚动区域）滚动到顶部
+function scrollCommunityTop() {
+  const target = getCommunityScrollTarget()
+  if (!target) return Promise.resolve(false)
+  try {
+    return animateScrollTop(target, 0)
+  } catch (e) {
+    target.scrollTop = 0
+    return Promise.resolve(false)
   }
-  for (const el of candidates) {
-    if (isScrollable(el)) {
-      try {
-        if (typeof el.scrollTo === 'function') {
-          el.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          el.scrollTop = 0;
-        }
-      } catch (e) {
-        el.scrollTop = 0;
-      }
-      return;
-    }
+}
+
+async function scrollCommunityTopBeforeFilterChange() {
+  const target = getCommunityScrollTarget()
+  if (!target) return
+  const currentTop = Number(target.scrollTop || 0)
+  if (currentTop < 36) return
+  try {
+    await animateScrollTop(target, 0)
+  } catch (e) {
+    target.scrollTop = 0
   }
 }
 
@@ -959,7 +1022,9 @@ function isLandmarkTag(tag) {
   return landmarks.value.some(lm => lm.name === tag)
 }
 
-function clickPostTag(tag) {
+async function clickPostTag(tag) {
+  await scrollCommunityTopBeforeFilterChange()
+
   if (isLandmarkTag(tag)) {
     filterLandmark.value = tag
     selectedFilterTags.value = []
