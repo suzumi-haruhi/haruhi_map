@@ -5,7 +5,6 @@
         <RouterLink to="/" class="nav-link" @click="handleMapTabClick">地图</RouterLink>
         <RouterLink to="/landmarks" class="nav-link">圣地列表</RouterLink>
         <RouterLink to="/user" class="nav-link">我的信息</RouterLink>
-        <RouterLink to="/admin" class="nav-link">管理员界面</RouterLink>
         <button class="nav-link ghost" type="button" @click="goMainSite">返回主站</button>
       </nav>
     </header>

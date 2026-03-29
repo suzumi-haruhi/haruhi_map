@@ -1,5 +1,7 @@
 <template>
-  <div class="admin-shell">
+  <div class="admin-page">
+    <template v-if="adminReady">
+      <div class="admin-shell">
     <aside class="admin-nav">
       <div class="admin-brand">管理员界面</div>
       <nav class="admin-links">
@@ -457,21 +459,44 @@
       </section>
     </div>
 
-    <div v-if="authOpen" class="modal-overlay">
-      <section class="card modal-card" @click.stop>
+      </div>
+
+      <div v-if="authOpen" class="modal-overlay">
+        <section class="card modal-card" @click.stop>
+          <div class="section-title">管理员验证</div>
+          <div class="muted" style="margin-top:6px;">口令 1 小时内有效</div>
+          <div style="margin-top:12px;">
+            <input class="input" type="password" v-model="authPassword" placeholder="ADMIN_PASSWORD" />
+          </div>
+          <div class="row" style="justify-content: flex-end; gap:8px; margin-top:14px;">
+            <button class="btn primary" :disabled="authSubmitting" @click="submitAuth">
+              {{ authSubmitting ? '验证中...' : '确认' }}
+            </button>
+          </div>
+          <div v-if="authError" class="muted" style="color:#ff9b9b; margin-top:6px;">{{ authError }}</div>
+        </section>
+      </div>
+    </template>
+
+    <div v-else class="admin-gate-shell">
+      <section class="card admin-gate-card">
         <div class="section-title">管理员验证</div>
-        <div class="muted" style="margin-top:6px;">口令 1 小时内有效</div>
-        <div style="margin-top:12px;">
-          <input class="input" type="password" v-model="authPassword" placeholder="ADMIN_PASSWORD" />
-        </div>
-        <div class="row" style="justify-content: flex-end; gap:8px; margin-top:14px;">
-          <button class="btn primary" :disabled="authSubmitting" @click="submitAuth">
-            {{ authSubmitting ? '验证中...' : '确认' }}
-          </button>
-        </div>
-        <div v-if="authError" class="muted" style="color:#ff9b9b; margin-top:6px;">{{ authError }}</div>
+        <div v-if="adminChecking" class="muted" style="margin-top:6px;">正在验证缓存口令...</div>
+        <template v-else>
+          <div class="muted" style="margin-top:6px;">验证通过前不显示后台内容。</div>
+          <div style="margin-top:12px;">
+            <input class="input" type="password" v-model="authPassword" placeholder="ADMIN_PASSWORD" />
+          </div>
+          <div class="row" style="justify-content: flex-end; gap:8px; margin-top:14px;">
+            <button class="btn primary" :disabled="authSubmitting" @click="submitAuth">
+              {{ authSubmitting ? '验证中...' : '进入管理员界面' }}
+            </button>
+          </div>
+          <div v-if="authError" class="muted" style="color:#ff9b9b; margin-top:6px;">{{ authError }}</div>
+        </template>
       </section>
     </div>
+
   </div>
 </template>
 
@@ -501,6 +526,7 @@ const authOpen = ref(false)
 const authSubmitting = ref(false)
 const authPassword = ref('')
 const authError = ref('')
+const adminChecking = ref(true)
 const adminReady = ref(false)
 const landmarks = ref([])
 const landmarkLoading = ref(false)
@@ -646,6 +672,7 @@ function closeCreate() {
 function openAuth() {
   authOpen.value = true
   authPassword.value = ''
+  authError.value = ''
 }
 
 function closeAuth() {
@@ -1197,8 +1224,12 @@ async function submitEdit() {
 }
 
 async function verifyCachedAdmin() {
+  adminChecking.value = true
+  authError.value = ''
   if (!api.hasAdminPassword()) {
+    adminReady.value = false
     openAuth()
+    adminChecking.value = false
     return
   }
   try {
@@ -1208,12 +1239,15 @@ async function verifyCachedAdmin() {
   } catch {
     api.clearAdminPassword()
     adminReady.value = false
-    authError.value = '口令已失效，请重新输入'
     openAuth()
+    authError.value = '口令已失效，请重新输入'
+  } finally {
+    adminChecking.value = false
   }
 }
 
 async function loadLandmarks() {
+  if (!adminReady.value) return
   landmarkLoading.value = true
   landmarkError.value = ''
   try {
@@ -1331,16 +1365,19 @@ async function submitAuth() {
 
 onMounted(() => {
   verifyCachedAdmin()
-  loadLandmarks()
-  loadPosts()
-  loadUsers()
 })
 
 watch(adminReady, (next) => {
   if (next) {
+    loadLandmarks()
     loadUsers()
     loadPosts()
+    return
   }
+  selectedPost.value = null
+  landmarks.value = []
+  posts.value = []
+  users.value = []
 }, { flush: 'post' })
 
 watch([postSortBy, postSortOrder, postAdminOnly], () => {
@@ -1349,6 +1386,10 @@ watch([postSortBy, postSortOrder, postAdminOnly], () => {
 </script>
 
 <style scoped>
+.admin-page {
+  min-height: 100vh;
+  background: var(--bg);
+}
 .admin-shell {
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -1357,6 +1398,17 @@ watch([postSortBy, postSortOrder, postAdminOnly], () => {
   width: 100%;
   flex: 1;
   min-width: 0;
+}
+.admin-gate-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.admin-gate-card {
+  width: min(420px, 100%);
 }
 .admin-nav {
   border-right: 1px solid var(--border);

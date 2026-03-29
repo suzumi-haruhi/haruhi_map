@@ -11,7 +11,7 @@
       </div>
       <div class="post-header-right">
         <button class="btn ghost sm" type="button" @click="goBack">返回</button>
-        <button class="btn danger sm" type="button" @click="requestDeletePost">删除</button>
+        <button v-if="isPostAuthor" class="btn danger sm" type="button" @click="requestDeletePost">删除</button>
       </div>
     </div>
 
@@ -112,7 +112,7 @@
             </template>
           </div>
         </div>
-        <button class="btn danger comment-delete" type="button" @click.stop="requestDeleteComment(c)">删除</button>
+        <button v-if="canDeleteComment(c)" class="btn danger comment-delete" type="button" @click.stop="requestDeleteComment(c)">删除</button>
       </div>
       <div v-if="!comments.length" class="muted">暂无评论</div>
     </div>
@@ -189,6 +189,12 @@ const isPostAuthor = computed(() => {
   const nick = userStore.user?.nickname
   return !!(nick && nick === post.value?.user?.name)
 })
+
+function canDeleteComment(comment) {
+  const nickname = String(userStore.user?.nickname || '').trim()
+  const author = String(comment?.user?.name || '').trim()
+  return !!(nickname && author && nickname === author)
+}
 
 const contentLines = computed(() => {
   const resolvedCoverCaption = getCoverImageCaption()
@@ -476,11 +482,12 @@ function requestDeletePost() {
 }
 
 function requestDeleteComment(c) {
-  // 简化：先确认，再尝试作为作者删除（服务器会鉴权）
-  if (!c?.id) return
+  if (!c?.id || !canDeleteComment(c)) return
   const ok = confirm('确认删除该评论吗？此操作不可撤销。')
   if (!ok) return
-  api.deletePostComment(c.id).then(() => loadComments()).catch(err => console.error(err))
+  api.deletePostComment(c.id)
+    .then(() => loadComments())
+    .catch(err => alert(err?.message || '删除失败'))
 }
 
 onMounted(() => {
