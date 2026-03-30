@@ -159,12 +159,75 @@
           <div class="publish-side">
             <div class="publish-field">
               <label>头图 <span class="muted" style="font-size:10px;">(COVER IMAGE)</span></label>
-              <div class="cover-uploader" @click="triggerCoverUpload">
-                <img v-if="publishCoverPreview" :src="publishCoverPreview" alt="cover" />
-                <div v-else class="uploader-placeholder">
-                   <div class="up-icon">🖼️</div>
-                   <div class="up-text">点击上传头图</div>
-                   <div class="up-hint">将自动保存原图与裁剪图</div>
+              <div class="cover-source-switch" role="tablist" aria-label="选择头图来源">
+                <button
+                  type="button"
+                  class="cover-source-btn"
+                  :class="{ active: publishCoverSource === 'article' }"
+                  @click="setPublishCoverSource('article')"
+                >
+                  从正文配图选
+                </button>
+                <button
+                  type="button"
+                  class="cover-source-btn"
+                  :class="{ active: publishCoverSource === 'upload' }"
+                  @click="setPublishCoverSource('upload')"
+                >
+                  上传头图
+                </button>
+              </div>
+
+              <div v-if="publishCoverSource === 'article'" class="cover-branch-card">
+                <div class="cover-branch-head">
+                  <span class="cover-branch-title">正文封面</span>
+                  <span class="muted">{{ articleCoverSelectionSummary }}</span>
+                </div>
+
+                <div v-if="articleCoverChoices.length" class="cover-choice-grid-wrap">
+                  <div class="cover-choice-grid">
+                    <button
+                      v-for="item in articleCoverChoices"
+                      :key="item.id"
+                      type="button"
+                      class="cover-choice-card"
+                      :class="{ 'is-selected': isArticleCoverSelected(item.id) }"
+                      @click="toggleArticleCover(item.id)"
+                    >
+                      <img :src="item.src" :alt="`正文配图 ${item.order}`" />
+                      <span class="cover-choice-meta">正文图 {{ item.order }}</span>
+                      <span v-if="articleCoverSelectionOrder(item.id)" class="cover-choice-badge">
+                        {{ articleCoverSelectionOrder(item.id) }}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <div v-else class="cover-branch-empty">
+                  添加正文图片后，可选 1-3 张作封面。
+                </div>
+              </div>
+
+              <div v-else class="cover-branch-card">
+                <div class="cover-uploader" @click="triggerCoverUpload">
+                  <img v-if="publishCoverPreview" :src="publishCoverPreview" alt="cover" />
+                  <div v-else class="uploader-placeholder">
+                    <div class="up-icon">🖼️</div>
+                    <div class="up-text">点击上传头图</div>
+                    <div class="up-hint">上传后将直接作为封面使用</div>
+                  </div>
+                </div>
+                <div class="cover-upload-meta">
+                  <span class="muted">
+                    {{ publishCoverPreview ? '已选择封面图，可继续替换' : '未上传头图时，可切换到正文配图封面' }}
+                  </span>
+                  <button
+                    v-if="publishCoverPreview"
+                    type="button"
+                    class="btn ghost cover-clear-btn"
+                    @click.stop="clearUploadedCover"
+                  >
+                    清除
+                  </button>
                 </div>
                 <input type="file" ref="coverFileRef" hidden accept="image/*" @change="onPublishCoverFile" />
               </div>
@@ -427,9 +490,25 @@ const publishPreviews = ref([])
 const publishContent = ref('')
 const publishSummary = ref('')
 const publishTitle = ref('')
-const publishBlocks = ref([{ id: Date.now(), type: 'paragraph', value: '' }])
+let publishBlockSeed = Date.now()
+function nextPublishBlockId() {
+  publishBlockSeed += 1
+  return publishBlockSeed
+}
+function createPublishBlock(type = 'paragraph') {
+  return {
+    id: nextPublishBlockId(),
+    type,
+    value: '',
+    preview: null,
+    file: null
+  }
+}
+const publishBlocks = ref([createPublishBlock()])
+const publishCoverSource = ref('article')
 const publishCoverFile = ref(null)
 const publishCoverPreview = ref(null)
+const selectedArticleCoverIds = ref([])
 const isAdminPost = ref(false)
 
 const handleAdminLogin = async () => {
@@ -463,29 +542,128 @@ const formattedCurrentDate = computed(() => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 })
 
+function revokeObjectUrl(url) {
+  if (!url) return
+  try {
+    URL.revokeObjectURL(url)
+  } catch (e) {}
+}
+
+function clearUploadedCover() {
+  revokeObjectUrl(publishCoverPreview.value)
+  publishCoverPreview.value = null
+  publishCoverFile.value = null
+  if (coverFileRef.value) coverFileRef.value.value = ''
+}
+
+function cleanupPublishBlockPreviews(blocks = publishBlocks.value) {
+  for (const block of blocks) {
+    revokeObjectUrl(block?.preview)
+  }
+}
+
+function sameIdList(a, b) {
+  if (a.length !== b.length) return false
+  return a.every((id, index) => id === b[index])
+}
+
+const articleCoverChoices = computed(() => publishBlocks.value
+  .filter(block => block.type === 'image' && block.file && block.preview)
+  .map((block, index) => ({
+    id: block.id,
+    src: block.preview,
+    caption: String(block.value || '').trim(),
+    order: index + 1
+  })))
+const articleCoverSelectionLimit = computed(() => Math.min(3, articleCoverChoices.value.length))
+const autoArticleCoverIds = computed(() => articleCoverChoices.value
+  .slice(0, articleCoverSelectionLimit.value)
+  .map(item => item.id))
+const manualArticleCoverIds = computed(() => {
+  const selected = new Set(selectedArticleCoverIds.value)
+  return articleCoverChoices.value
+    .filter(item => selected.has(item.id))
+    .map(item => item.id)
+    .slice(0, articleCoverSelectionLimit.value)
+})
+const hasManualArticleCoverSelection = computed(() => manualArticleCoverIds.value.length > 0)
+const selectedArticleCoverIdsResolved = computed(() => (
+  hasManualArticleCoverSelection.value ? manualArticleCoverIds.value : autoArticleCoverIds.value
+))
+const selectedArticleCoverIdSet = computed(() => new Set(selectedArticleCoverIdsResolved.value))
+const articleCoverSelectionSummary = computed(() => {
+  if (!articleCoverChoices.value.length) return '添加正文图片后可选择'
+  if (!hasManualArticleCoverSelection.value) {
+    return `默认使用前 ${selectedArticleCoverIdsResolved.value.length} 张`
+  }
+  return `已手动选择 ${selectedArticleCoverIdsResolved.value.length} / ${articleCoverSelectionLimit.value}`
+})
+
+function syncArticleCoverSelection() {
+  const candidateIds = articleCoverChoices.value.map(item => item.id)
+  const limit = articleCoverSelectionLimit.value
+  let nextIds = selectedArticleCoverIds.value
+    .filter(id => candidateIds.includes(id))
+    .slice(0, limit)
+
+  if (!sameIdList(nextIds, selectedArticleCoverIds.value)) {
+    selectedArticleCoverIds.value = nextIds
+  }
+}
+
+function setPublishCoverSource(source) {
+  publishCoverSource.value = source
+}
+
+function isArticleCoverSelected(blockId) {
+  return selectedArticleCoverIdSet.value.has(blockId)
+}
+
+function articleCoverSelectionOrder(blockId) {
+  const index = selectedArticleCoverIdsResolved.value.indexOf(blockId)
+  return index >= 0 ? index + 1 : 0
+}
+
+function toggleArticleCover(blockId) {
+  const selectedIds = selectedArticleCoverIdsResolved.value
+  if (selectedIds.includes(blockId)) {
+    const nextIds = selectedIds.filter(id => id !== blockId)
+    selectedArticleCoverIds.value = nextIds
+    publishMsg.value = ''
+    publishError.value = false
+    return
+  }
+  if (selectedIds.length >= articleCoverSelectionLimit.value) {
+    publishMsg.value = `最多选择 ${articleCoverSelectionLimit.value} 张正文配图作为封面`
+    publishError.value = true
+    return
+  }
+  publishMsg.value = ''
+  publishError.value = false
+  selectedArticleCoverIds.value = [...selectedIds, blockId]
+}
+
 const triggerCoverUpload = () => {
   if (coverFileRef.value) coverFileRef.value.click()
 }
 const coverFileRef = ref(null)
-const onPublishCoverFile = (e) => {
-  const file = e.target.files[0]
-  if(file) {
-    publishCoverFile.value = file
-    publishCoverPreview.value = URL.createObjectURL(file)
-  }
+function onPublishCoverFile(e) {
+  const file = e.target.files?.[0]
+  if (e.target) e.target.value = ''
+  if (!file) return
+  clearUploadedCover()
+  publishCoverFile.value = file
+  publishCoverPreview.value = URL.createObjectURL(file)
+  publishMsg.value = ''
+  publishError.value = false
 }
 
 const addPublishBlock = (type) => {
-  publishBlocks.value.push({
-    id: Date.now(),
-    type,
-    value: '',
-    preview: null,
-    file: null
-  })
+  publishBlocks.value.push(createPublishBlock(type))
 }
 const removePublishBlock = (idx) => {
-  publishBlocks.value.splice(idx, 1)
+  const [removed] = publishBlocks.value.splice(idx, 1)
+  revokeObjectUrl(removed?.preview)
 }
 const movePublishBlock = (idx, dir) => {
   if(idx + dir < 0 || idx + dir >= publishBlocks.value.length) return
@@ -500,6 +678,7 @@ const triggerBlockImage = (idx) => {
   input.onchange = (e) => {
     const file = e.target.files[0]
     if(file) {
+      revokeObjectUrl(publishBlocks.value[idx].preview)
       publishBlocks.value[idx].file = file
       publishBlocks.value[idx].preview = URL.createObjectURL(file)
     }
@@ -562,6 +741,7 @@ const previewContentBlocks = computed(() => {
     if (block.type === 'image' && block.preview) {
       out.push({
         type: 'image',
+        blockId: block.id,
         src: block.preview,
         caption: String(block.value || '').trim()
       })
@@ -570,22 +750,15 @@ const previewContentBlocks = computed(() => {
   return out
 })
 const previewCoverImages = computed(() => {
-  const bodyImageItems = previewContentBlocks.value.filter(item => item.type === 'image')
-  if (publishCoverPreview.value) {
+  if (publishCoverSource.value === 'upload') {
+    if (!publishCoverPreview.value) return []
     return [{ src: publishCoverPreview.value, caption: '' }]
   }
-  return bodyImageItems.slice(0, Math.min(3, bodyImageItems.length))
+  return previewContentBlocks.value.filter(item => item.type === 'image' && selectedArticleCoverIdSet.value.has(item.blockId))
 })
 const previewBodyBlocks = computed(() => {
-  let remainingAutoCoverImages = publishCoverPreview.value ? 0 : previewCoverImages.value.length
-  return previewContentBlocks.value.filter((item) => {
-    if (item.type !== 'image') return true
-    if (remainingAutoCoverImages > 0) {
-      remainingAutoCoverImages -= 1
-      return false
-    }
-    return true
-  })
+  if (publishCoverSource.value !== 'article') return previewContentBlocks.value
+  return previewContentBlocks.value.filter(item => item.type !== 'image' || !selectedArticleCoverIdSet.value.has(item.blockId))
 })
 
 // scroll-top 按钮样式数据与定位逻辑
@@ -660,6 +833,8 @@ onUnmounted(() => {
   window.removeEventListener('scroll', updateScrollBtnPos)
   if (ro) ro.disconnect()
   if (containerScrollEl) containerScrollEl.removeEventListener('scroll', updateScrollBtnPos)
+  cleanupPublishBlockPreviews()
+  clearUploadedCover()
 })
 
 function openPost(post) {
@@ -992,14 +1167,16 @@ function openPublish(parentPost = null) {
 function closePublish() {
   publishOpen.value = false
   previewMode.value = false
+  cleanupPublishBlockPreviews()
   cleanupPublishPreviews()
   publishFiles.value = []
   publishContent.value = ''
   publishTitle.value = ''
   publishSummary.value = ''
-  publishBlocks.value = [{ id: Date.now(), type: 'paragraph', value: '' }]
-  publishCoverFile.value = null
-  publishCoverPreview.value = null
+  publishBlocks.value = [createPublishBlock()]
+  publishCoverSource.value = 'article'
+  clearUploadedCover()
+  selectedArticleCoverIds.value = []
   publishLandmark.value = null
   selectedNormalTags.value = []
   isAdminPost.value = false
@@ -1102,8 +1279,7 @@ async function submitPost() {
 
   // 从 blocks 构建正文内容与图片文件列表
   const contentParts = []
-  const imageFiles = []
-  const imageCaptions = []
+  const imageBlocks = []
   for (const block of publishBlocks.value) {
     if (block.type === 'paragraph' && String(block.value || '').trim()) {
       contentParts.push(String(block.value).trim())
@@ -1111,8 +1287,11 @@ async function submitPost() {
       contentParts.push(`## ${String(block.value).trim()}`)
     } else if (block.type === 'image') {
       if (block.file) {
-        imageFiles.push(block.file)
-        imageCaptions.push(String(block.value || '').trim())
+        imageBlocks.push({
+          id: block.id,
+          file: block.file,
+          caption: String(block.value || '').trim()
+        })
       }
     }
   }
@@ -1120,9 +1299,35 @@ async function submitPost() {
   const content = contentParts.join('\n\n')
   const summary = String(publishSummary.value || '').trim()
   const title = String(publishTitle.value || '').trim()
-  const totalImages = (publishCoverFile.value ? 1 : 0) + imageFiles.length
-  const coverMode = publishCoverFile.value ? 'manual' : (imageFiles.length ? 'auto' : 'manual')
-  const coverImageCount = publishCoverFile.value ? 1 : Math.min(3, imageFiles.length)
+  const usingUploadedCover = publishCoverSource.value === 'upload' && !!publishCoverFile.value
+  let orderedImageBlocks = [...imageBlocks]
+  let coverMode = 'manual'
+  let coverImageCount = 0
+
+  if (publishCoverSource.value === 'article' && imageBlocks.length) {
+    const selectedIds = selectedArticleCoverIdsResolved.value
+    if (!selectedIds.length) {
+      publishMsg.value = '请先从正文配图中选择 1 到 3 张封面图'
+      publishError.value = true
+      return
+    }
+    const selectedIdSet = new Set(selectedIds)
+    const selectedBlocks = imageBlocks.filter(block => selectedIdSet.has(block.id))
+    const otherBlocks = imageBlocks.filter(block => !selectedIdSet.has(block.id))
+    // 服务端仍按前几张图解释自动封面，这里按所选结果重排上传顺序。
+    orderedImageBlocks = selectedBlocks.concat(otherBlocks)
+    coverMode = 'auto'
+    coverImageCount = selectedBlocks.length
+  } else if (publishCoverSource.value === 'upload' && imageBlocks.length && !usingUploadedCover) {
+    publishMsg.value = '请先上传头图，或切换到正文配图封面'
+    publishError.value = true
+    return
+  } else if (usingUploadedCover) {
+    coverMode = 'manual'
+    coverImageCount = 1
+  }
+
+  const totalImages = (usingUploadedCover ? 1 : 0) + orderedImageBlocks.length
 
   if (!content && !totalImages) {
     publishMsg.value = '请输入正文内容或添加图片'
@@ -1158,7 +1363,7 @@ async function submitPost() {
     if (replyParent.value?.id) fd.append('parent_post_id', replyParent.value.id)
 
     // 头图优先作为第一张图片
-    if (publishCoverFile.value) {
+    if (usingUploadedCover) {
       let fileToUpload
       try {
         fileToUpload = await compressFile(publishCoverFile.value, { quality: 0.82, maxWidth: 2560 })
@@ -1168,17 +1373,17 @@ async function submitPost() {
       fd.append('images', fileToUpload)
     }
 
-    for (const f of imageFiles) {
+    for (const imageBlock of orderedImageBlocks) {
       let fileToUpload
       try {
-        fileToUpload = await compressFile(f, { quality: 0.82, maxWidth: 2560 })
+        fileToUpload = await compressFile(imageBlock.file, { quality: 0.82, maxWidth: 2560 })
       } catch {
         throw new Error('图片转换失败，请重试')
       }
       fd.append('images', fileToUpload)
     }
 
-    const captionPayload = (publishCoverFile.value ? [''] : []).concat(imageCaptions)
+    const captionPayload = (usingUploadedCover ? [''] : []).concat(orderedImageBlocks.map(block => block.caption))
     fd.append('image_captions', JSON.stringify(captionPayload))
 
     const postFn = isAdminPost.value ? api.adminCreatePost.bind(api) : api.createPost.bind(api)
@@ -1492,6 +1697,16 @@ function applyDefaultLandmark() {
 
 watch(commentOrder, () => {
   if (selectedPost.value) loadPostComments()
+})
+
+watch(articleCoverChoices, () => {
+  syncArticleCoverSelection()
+}, { immediate: true })
+
+watch(publishCoverSource, (source) => {
+  if (source === 'article') {
+    syncArticleCoverSelection()
+  }
 })
 
 </script>
@@ -1820,6 +2035,125 @@ watch(commentOrder, () => {
   color: var(--text);
 }
 
+.cover-source-switch {
+  display: flex;
+  gap: 8px;
+}
+.cover-source-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.02);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.2s;
+}
+.cover-source-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.cover-source-btn.active {
+  border-color: rgba(0,119,255,0.48);
+  background: rgba(0,119,255,0.1);
+  color: var(--accent);
+  box-shadow: 0 10px 26px rgba(0,119,255,0.12);
+}
+.cover-branch-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+}
+.cover-branch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cover-branch-title {
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.cover-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+.cover-choice-grid-wrap {
+  position: relative;
+}
+.cover-choice-card {
+  position: relative;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.cover-choice-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0,119,255,0.48);
+  box-shadow: 0 10px 24px rgba(6,12,20,0.08);
+}
+.cover-choice-card.is-selected {
+  border-color: rgba(0,119,255,0.7);
+  box-shadow: 0 0 0 2px rgba(0,119,255,0.12);
+}
+.cover-choice-card img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  object-fit: cover;
+}
+.cover-choice-meta {
+  display: block;
+  padding: 8px 10px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.cover-choice-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(0,119,255,0.28);
+}
+.cover-branch-empty {
+  padding: 18px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.55;
+  text-wrap: balance;
+  word-break: keep-all;
+}
+
 .cover-uploader {
   width: 100%;
   aspect-ratio: 16/9;
@@ -1842,8 +2176,27 @@ watch(commentOrder, () => {
   object-fit: cover;
 }
 .uploader-placeholder {
+  width: 100%;
+  max-width: 220px;
+  margin: 0 auto;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   text-align: center;
   color: var(--muted);
+}
+.up-text,
+.up-hint {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.up-text {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 .up-icon {
   font-size: 24px;
@@ -1853,7 +2206,26 @@ watch(commentOrder, () => {
   font-size: 10px;
   color: var(--muted);
   opacity: 0.8;
-  margin-top: 4px;
+  line-height: 1.45;
+}
+.cover-upload-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cover-upload-meta .muted {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.cover-clear-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
 }
 
 .publish-title-input {
@@ -2176,6 +2548,17 @@ watch(commentOrder, () => {
   }
   .post-list {
     max-width: 100%;
+  }
+  .cover-choice-grid {
+    grid-template-columns: 1fr;
+  }
+  .cover-branch-head,
+  .cover-upload-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .cover-source-switch {
+    flex-direction: column;
   }
 }
 /* 全宽单列卡片 */
